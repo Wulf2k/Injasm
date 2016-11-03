@@ -73,12 +73,12 @@
         'Separate Command from params
         If str.Contains(" ") Then
             cmd = str.Split(" ")(0)
-            params = str.Split(" ")(1)
+            params = Microsoft.VisualBasic.Right(str, str.Length - cmd.Length)
             params = params.Replace(" ", "")
         Else
             cmd = str
         End If
-
+        MsgBox(params)
         'Check for section name
         If cmd.Contains(":") Then
             ptrs.Add(cmd.Replace(":", ""), pos)
@@ -140,8 +140,13 @@
         End If
 
         'Define registers, if not values
-        If reg.Contains(param1) Then reg1 = param1
-        If reg.Contains(param2) Then reg1 = param2
+        If reg32.Contains(param1) Then reg1 = param1
+        If reg32.Contains(param2) Then reg2 = param2
+        If reg16.Contains(param1) Then reg1 = param1
+        If reg16.Contains(param2) Then reg2 = param2
+        If reg8.Contains(param1) Then reg1 = param1
+        If reg8.Contains(param2) Then reg2 = param2
+
 
         'If param is previously defined section
         If ptrs.Contains(param1) Then
@@ -183,8 +188,8 @@
         If code.Contains(cmd) Then
             newbytes = {0}
             newbytes(0) = code(cmd)
-            If reg.Contains(reg1) Then
-                newbytes(0) += reg(reg1)
+            If reg32.Contains(reg1) Then
+                newbytes(0) = newbytes(0) Or reg32(reg1)
             End If
             Add(newbytes)
             pos += newbytes.Count
@@ -254,7 +259,7 @@
                         End If
                     Else
                         newbytes = {&HFF, &HA0}
-                        newbytes(1) = newbytes(1) Or reg(reg1)
+                        newbytes(1) = newbytes(1) Or reg32(reg1)
                         newbytes = newbytes.Concat(BitConverter.GetBytes(plus1)).ToArray
                     End If
                 End If
@@ -264,8 +269,24 @@
 
 
             Case "mov"
+                '88 = r/m8, r8
+                '89 = r/m16/32, r16/32
+                '8a = r8, r/m8
+                '8b = r16/32, r16/32
+
+                'b0+r = r8, imm8
+                'b8+r = r16/32, imm16/32
+                If reg8.Contains(reg1) And reg8.Contains(reg2) Then
+                    newbytes = {&H88, &HC0}
+                    newbytes(1) = newbytes(1) Or reg8(reg1)
+                    newbytes(1) = newbytes(1) Or reg8(reg2) * 8
+
+                End If
 
 
+                Add(newbytes)
+                pos += newbytes.Count
+                Return
 
 
             Case "push"
