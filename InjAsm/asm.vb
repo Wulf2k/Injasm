@@ -78,7 +78,7 @@
         Else
             cmd = str
         End If
-        MsgBox(params)
+
         'Check for section name
         If cmd.Contains(":") Then
             ptrs.Add(cmd.Replace(":", ""), pos)
@@ -214,7 +214,7 @@
                     End If
                 Else
                     'Is an offset from a register
-                    If plus1 < &H100 Then
+                    If Math.Abs(plus1) < &H100 Then
                         If plus1 = 0 Then
                             newbytes = {&HFF, &H10}
                             newbytes(1) = newbytes(1) Or reg32(reg1)
@@ -248,7 +248,7 @@
                     End If
                 Else
                     'Is an offset from a register
-                    If plus1 < &H100 Then
+                    If Math.Abs(plus1) < &H100 Then
                         If plus1 = 0 Then
                             newbytes = {&HFF, &H20}
                             newbytes(1) = newbytes(1) Or reg32(reg1)
@@ -276,13 +276,59 @@
 
                 'b0+r = r8, imm8
                 'b8+r = r16/32, imm16/32
+                'TODO:  Complete
+                'TODO:  Errorcheck 'mov ecx, eax'
                 If reg8.Contains(reg1) And reg8.Contains(reg2) Then
                     newbytes = {&H88, &HC0}
                     newbytes(1) = newbytes(1) Or reg8(reg1)
                     newbytes(1) = newbytes(1) Or reg8(reg2) * 8
-
+                    'TODO:  Complete
                 End If
 
+
+                If reg32.Contains(reg1) And reg2 = "" Then
+                    newbytes = {&HB8}
+                    newbytes(0) = newbytes(0) Or reg32(reg1)
+                    newbytes = newbytes.Concat(BitConverter.GetBytes(val2)).ToArray
+                End If
+
+
+                If reg32.Contains(reg1) And reg32.Contains(reg2) Then
+                    newbytes = {&H89, 0}
+
+
+
+                    If ptr1 Then
+                        newbytes(1) = newbytes(1) Or (reg32(reg2) * 8)
+                        newbytes(1) = newbytes(1) Or reg32(reg1)
+                    End If
+                    If ptr2 Then
+                        newbytes(0) = newbytes(0) Or &H2
+                        newbytes(1) = newbytes(1) Or (reg32(reg1) * 8)
+                        newbytes(1) = newbytes(1) Or reg32(reg2)
+                    End If
+
+                    If Not (ptr1 Or ptr2) Then
+                        newbytes(1) = newbytes(1) Or (reg32(reg2) * 8)
+                        newbytes(1) = newbytes(1) Or reg32(reg1)
+                        newbytes(1) = newbytes(1) Or &HC0
+                    End If
+
+
+
+                    Dim offset
+                    offset = plus1 + plus2
+
+
+                    If (Math.Abs(offset) > 0 And Math.Abs(offset) < &H100) Then
+                        newbytes(1) = newbytes(1) Or &H40
+                        newbytes = newbytes.Concat({(offset)}).ToArray
+                    End If
+                    If Math.Abs(offset) > &HFF Then
+                        newbytes(1) = newbytes(1) Or &H80
+                        newbytes = newbytes.Concat(BitConverter.GetBytes(offset)).ToArray
+                    End If
+                End If
 
                 Add(newbytes)
                 pos += newbytes.Count
@@ -296,7 +342,7 @@
                         newbytes = {&H50}
                         newbytes(0) = newbytes(0) Or reg32(reg1)
                     Else
-                        If val1 < &H100 Then
+                        If Math.Abs(val1) < &H100 Then
                             newbytes = {&H6A, 0}
                             newbytes(1) = val1
                         Else
@@ -306,7 +352,7 @@
                     End If
                 Else
                     'Is an offset from a register
-                    If plus1 < &H100 Then
+                    If Math.Abs(plus1) < &H100 Then
                         If plus1 = 0 Then
                             'No Offset
                             newbytes = {&HFF, &H30}
