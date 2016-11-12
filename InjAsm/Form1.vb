@@ -7,6 +7,13 @@
             a.Asm(line)
         Next
 
+
+        
+
+
         MsgBox(a.ToString & " - " & a.pos)
+        a.Clear
+
+        
     End Sub
 End Class
