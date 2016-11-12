@@ -6,7 +6,7 @@
     Private reg16 As Hashtable = New Hashtable
     Private reg32 As Hashtable = New Hashtable
     Private code As Hashtable = New Hashtable
-    Private ptrs As Hashtable = New Hashtable
+    Private vars As Hashtable = New Hashtable
 
     Public Sub New()
         pos = 0
@@ -53,6 +53,15 @@
     Public Sub Add(ByVal newbytes() As Byte)
         bytes = bytes.Concat(newbytes).ToArray
     End Sub
+    Public Sub AddVar(ByVal name As String, hexval As String)
+        AddVar(name, Convert.ToInt32(Microsoft.VisualBasic.Right(hexval, hexval.Length - 2), 16))
+    End Sub
+    Public Sub AddVar(ByVal name As String, val As IntPtr)
+        AddVar(name, CInt(val))
+    End Sub
+    Public Sub AddVar(ByVal name As String, val As Int32)
+        vars.Add(name.Replace(":", ""), val)
+    End Sub
     Public Sub Clear()
         bytes = {}
     End Sub
@@ -81,7 +90,7 @@
 
         'Check for section name
         If cmd.Contains(":") Then
-            ptrs.Add(cmd.Replace(":", ""), pos)
+            vars.Add(cmd.Replace(":", ""), pos)
             Return
         End If
 
@@ -115,7 +124,9 @@
         End If
         If param2.Contains("+") Or param2.Contains("-") Then
             If param2.Contains("0x") Then
-                plus2 = Convert.ToInt32(param2(3) & Microsoft.VisualBasic.Right(param2, param2.Length - 6), 16)
+                'plus2 = Convert.ToInt32(param2(3) & Microsoft.VisualBasic.Right(param2, param2.Length - 6), 16)
+                plus2 = Convert.ToInt32(Microsoft.VisualBasic.Right(param2, param2.Length - 4), 16)
+                If param2(3) = "-" Then plus2 *= -1
             Else
                 plus2 = Convert.ToInt32(param2(3) & Microsoft.VisualBasic.Right(param2, param2.Length - 4))
             End If
@@ -149,11 +160,11 @@
 
 
         'If param is previously defined section
-        If ptrs.Contains(param1) Then
-            val1 = ptrs(param1)
+        If vars.Contains(param1) Then
+            val1 = vars(param1)
         End If
-        If ptrs.Contains(param2) Then
-            val1 = ptrs(param2)
+        If vars.Contains(param2) Then
+            val2 = vars(param2)
         End If
 
 
@@ -255,7 +266,7 @@
                         Else
                             newbytes = {&HFF, &H60, 0}
                             newbytes(1) = newbytes(1) Or reg32(reg1)
-                            newbytes(2) = plus1
+                            newbytes(2) = plus1 And &HFF
                         End If
                     Else
                         newbytes = {&HFF, &HA0}
@@ -277,7 +288,6 @@
                 'b0+r = r8, imm8
                 'b8+r = r16/32, imm16/32
                 'TODO:  Complete
-                'TODO:  Errorcheck 'mov ecx, eax'
                 If reg8.Contains(reg1) And reg8.Contains(reg2) Then
                     newbytes = {&H88, &HC0}
                     newbytes(1) = newbytes(1) Or reg8(reg1)
@@ -292,11 +302,8 @@
                     newbytes = newbytes.Concat(BitConverter.GetBytes(val2)).ToArray
                 End If
 
-
                 If reg32.Contains(reg1) And reg32.Contains(reg2) Then
                     newbytes = {&H89, 0}
-
-
 
                     If ptr1 Then
                         newbytes(1) = newbytes(1) Or (reg32(reg2) * 8)
@@ -314,15 +321,18 @@
                         newbytes(1) = newbytes(1) Or &HC0
                     End If
 
-
-
                     Dim offset
                     offset = plus1 + plus2
 
+                    If (ptr1 And reg1 = "esp") Or (ptr2 And reg2 = "esp") Then
+                        newbytes = newbytes.Concat({&H24}).ToArray
+                    End If
 
-                    If (Math.Abs(offset) > 0 And Math.Abs(offset) < &H100) Then
-                        newbytes(1) = newbytes(1) Or &H40
-                        newbytes = newbytes.Concat({(offset)}).ToArray
+                    If Math.Abs(offset) < &H100 Then
+                        If offset > 0 Or (ptr2 And reg2 = "ebp") Or (ptr1 And reg1 = "ebp") Then
+                            newbytes(1) = newbytes(1) Or &H40
+                            newbytes = newbytes.Concat({offset And &HFF}).ToArray
+                        End If
                     End If
                     If Math.Abs(offset) > &HFF Then
                         newbytes(1) = newbytes(1) Or &H80
@@ -344,7 +354,7 @@
                     Else
                         If Math.Abs(val1) < &H100 Then
                             newbytes = {&H6A, 0}
-                            newbytes(1) = val1
+                            newbytes(1) = val1 And &HFF
                         Else
                             newbytes = {&H68}
                             newbytes = newbytes.Concat(BitConverter.GetBytes(val1)).ToArray
@@ -359,7 +369,7 @@
                         Else
                             'Offset between 0 and 0xFF
                             newbytes = {&HFF, &H70, 0}
-                            newbytes(2) = plus1
+                            newbytes(2) = plus1 And &HFF
                         End If
                         newbytes(1) = newbytes(1) Or reg32(reg1)
                     Else
@@ -368,6 +378,17 @@
                         newbytes(1) = newbytes(1) Or reg32(reg1)
                         newbytes = newbytes.Concat(BitConverter.GetBytes(plus1)).ToArray
                     End If
+                End If
+                Add(newbytes)
+                pos += newbytes.Count
+                Return
+
+            Case "ret"
+                newbytes = {&HC2}
+                If Math.Abs(val1) > 0 Then
+                    newbytes = newbytes.Concat(BitConverter.GetBytes(Convert.ToInt16(val1))).ToArray
+                Else
+                    newbytes(0) = newbytes(0) Or 1
                 End If
                 Add(newbytes)
                 pos += newbytes.Count
