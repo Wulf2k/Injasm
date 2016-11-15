@@ -1,4 +1,5 @@
 ﻿Public Class asm
+    'TODO:  Deal with jumps to points not yet defined
     Public bytes() As Byte = {}
     Public pos As Int32
 
@@ -245,6 +246,72 @@
                 Return
 
 
+            Case "cmp"
+                If reg32.Contains(reg1) And reg2 = "" Then
+                    newbytes = {&H81, &HF8}
+                    If Math.Abs(val2) < &HFF Then
+                        newbytes(0) = newbytes(0) Or 2
+                        newbytes = newbytes.Concat({val2 And &HFF}).ToArray
+                    Else
+                        If reg1 = "eax" Then
+                            newbytes = {&H3D}
+                        End If
+                        newbytes = newbytes.Concat(BitConverter.GetBytes(val2)).ToArray
+                    End If
+                    newbytes(1) = newbytes(1) Or reg32(reg1)
+                End If
+
+
+
+                If reg32.Contains(reg1) And reg32.Contains(reg2) Then
+                    newbytes = {&H39, 0}
+                    If ptr1 Then
+                        newbytes(1) = newbytes(1) Or (reg32(reg2) * 8)
+                        newbytes(1) = newbytes(1) Or reg32(reg1)
+                    End If
+                    If ptr2 Then
+                        newbytes(0) = newbytes(0) Or &H2
+                        newbytes(1) = newbytes(1) Or (reg32(reg1) * 8)
+                        newbytes(1) = newbytes(1) Or reg32(reg2)
+                    End If
+
+                    If Not (ptr1 Or ptr2) Then
+                        newbytes(1) = newbytes(1) Or (reg32(reg2) * 8)
+                        newbytes(1) = newbytes(1) Or reg32(reg1)
+                        newbytes(1) = newbytes(1) Or &HC0
+                    End If
+
+                    Dim offset
+                    offset = plus1 + plus2
+
+                    If Math.Abs(offset) < &H100 Then
+                        If offset > 0 Then
+                            newbytes(1) = newbytes(1) Or &H40
+                            newbytes = newbytes.Concat({offset And &HFF}).ToArray
+                        End If
+                    End If
+                    If Math.Abs(offset) > &HFF Then
+                        newbytes(1) = newbytes(1) Or &H80
+                        newbytes = newbytes.Concat(BitConverter.GetBytes(offset)).ToArray
+                    End If
+
+
+
+                    If Not ptr1 And Not ptr2 Then
+                        newbytes = {&H39, &HC0}
+                        newbytes(1) = newbytes(1) Or reg32(reg2) * 8
+                        newbytes(1) = newbytes(1) Or reg32(reg1)
+                    End If
+                End If
+                Add(newbytes)
+                pos += newbytes.Count
+                Return
+
+            Case "je"
+                newbytes = {&HF, &H84}
+                Dim addr = Convert.ToInt32(val1) - pos - 5
+                newbytes = newbytes.Concat(BitConverter.GetBytes(addr)).ToArray
+
             Case "jmp"
                 If Not ptr1 Then
                     If reg32.Contains(reg1) Then
@@ -279,14 +346,13 @@
                 Return
 
 
-            Case "mov"
-                '88 = r/m8, r8
-                '89 = r/m16/32, r16/32
-                '8a = r8, r/m8
-                '8b = r16/32, r16/32
+            Case "jne"
+                newbytes = {&HF, &H85}
+                Dim addr = Convert.ToInt32(val1) - pos - 5
+                newbytes = newbytes.Concat(BitConverter.GetBytes(addr)).ToArray
 
-                'b0+r = r8, imm8
-                'b8+r = r16/32, imm16/32
+
+            Case "mov"
                 'TODO:  Complete
                 If reg8.Contains(reg1) And reg8.Contains(reg2) Then
                     newbytes = {&H88, &HC0}
