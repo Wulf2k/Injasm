@@ -9,6 +9,8 @@
     Private code As Hashtable = New Hashtable
     Private vars As Hashtable = New Hashtable
 
+    Private varrefs As New SortedList(Of Integer, String)
+
     Public Sub New()
         pos = 0
         init()
@@ -61,10 +63,42 @@
         AddVar(name, CInt(val))
     End Sub
     Public Sub AddVar(ByVal name As String, val As Int32)
-        vars.Add(name.Replace(":", ""), val)
+        name = name.Replace(":", "")
+        
+
+        If Not vars.contains(name) Then
+            vars.Add(name, val)
+        Else
+            vars(name) = val
+            For each entry In varrefs
+            If entry.value = name Then
+                Dim tmpbyt() as Byte
+                
+
+                Select Case bytes(entry.key)
+                    Case &HE8, &HE9
+                        tmpbyt = BitConverter.GetBytes(val - (pos - (bytes.Length - entry.Key)) - 5)
+                        Array.Copy(tmpbyt, 0, bytes, entry.key+1, tmpbyt.Length)
+
+                    Case &HF
+                        tmpbyt = BitConverter.GetBytes(val - (pos - (bytes.Length - entry.Key)) - 6)
+                        Array.Copy(tmpbyt, 0, bytes, entry.key+2, tmpbyt.Length)
+
+                End Select
+            End If
+        Next
+
+
+
+
+        End If
     End Sub
     Public Sub Clear()
         bytes = {}
+        vars.Clear
+        varrefs.Clear
+        pos = 0
+
     End Sub
 
     Private Sub ParseInput(ByVal str As String,
@@ -91,7 +125,7 @@
 
         'Check for section name
         If cmd.Contains(":") Then
-            vars.Add(cmd.Replace(":", ""), pos)
+            AddVar(cmd, pos)
             Return
         End If
 
@@ -163,9 +197,11 @@
         'If param is previously defined section
         If vars.Contains(param1) Then
             val1 = vars(param1)
+            varrefs.Add(bytes.Length, param1)
         End If
         If vars.Contains(param2) Then
             val2 = vars(param2)
+            varrefs.Add(bytes.Length, param2)
         End If
 
 
@@ -212,6 +248,128 @@
 
 
         Select Case cmd
+            Case "add"
+                If reg32.Contains(reg1) And reg2 = "" Then
+                    newbytes = {&H81, &Hc0}
+                    If Math.Abs(val2) < &H80 Then
+                        newbytes(0) = newbytes(0) Or 2
+                        newbytes = newbytes.Concat({val2 And &HFF}).ToArray
+                    Else
+                        If reg1 = "eax" Then
+                            newbytes = {5}
+                        End If
+                        newbytes = newbytes.Concat(BitConverter.GetBytes(val2)).ToArray
+                    End If
+                    newbytes(1) = newbytes(1) Or reg32(reg1)
+                End If
+
+
+
+                If reg32.Contains(reg1) And reg32.Contains(reg2) Then
+                    newbytes = {1, 0}
+                    If ptr1 Then
+                        newbytes(1) = newbytes(1) Or (reg32(reg2) * 8)
+                        newbytes(1) = newbytes(1) Or reg32(reg1)
+                    End If
+                    If ptr2 Then
+                        newbytes(0) = newbytes(0) Or &H2
+                        newbytes(1) = newbytes(1) Or (reg32(reg1) * 8)
+                        newbytes(1) = newbytes(1) Or reg32(reg2)
+                    End If
+
+                    If Not (ptr1 Or ptr2) Then
+                        newbytes(1) = newbytes(1) Or (reg32(reg2) * 8)
+                        newbytes(1) = newbytes(1) Or reg32(reg1)
+                        newbytes(1) = newbytes(1) Or &HC0
+                    End If
+
+                    Dim offset
+                    offset = plus1 + plus2
+
+                    If Math.Abs(offset) < &H80 Then
+                        If offset > 0 Then
+                            newbytes(1) = newbytes(1) Or &H40
+                            newbytes = newbytes.Concat({offset And &HFF}).ToArray
+                        End If
+                    End If
+                    If Math.Abs(offset) > &H7F Then
+                        newbytes(1) = newbytes(1) Or &H80
+                        newbytes = newbytes.Concat(BitConverter.GetBytes(offset)).ToArray
+                    End If
+
+
+
+                    If Not ptr1 And Not ptr2 Then
+                        newbytes = {1, &HC0}
+                        newbytes(1) = newbytes(1) Or reg32(reg2) * 8
+                        newbytes(1) = newbytes(1) Or reg32(reg1)
+                    End If
+                End If
+                Add(newbytes)
+                pos += newbytes.Count
+                Return
+
+            Case "and"
+                If reg32.Contains(reg1) And reg2 = "" Then
+                    newbytes = {&H83, &HE0}
+                    If Math.Abs(val2) < &H80 Then
+                        newbytes(0) = newbytes(0) Or 2
+                        newbytes = newbytes.Concat({val2 And &HFF}).ToArray
+                    Else
+                        If reg1 = "eax" Then
+                            newbytes = {&H25}
+                        End If
+                        newbytes = newbytes.Concat(BitConverter.GetBytes(val2)).ToArray
+                    End If
+                    newbytes(1) = newbytes(1) Or reg32(reg1)
+                End If
+
+
+
+                If reg32.Contains(reg1) And reg32.Contains(reg2) Then
+                    newbytes = {&H21, 0}
+                    If ptr1 Then
+                        newbytes(1) = newbytes(1) Or (reg32(reg2) * 8)
+                        newbytes(1) = newbytes(1) Or reg32(reg1)
+                    End If
+                    If ptr2 Then
+                        newbytes(0) = newbytes(0) Or &H2
+                        newbytes(1) = newbytes(1) Or (reg32(reg1) * 8)
+                        newbytes(1) = newbytes(1) Or reg32(reg2)
+                    End If
+
+                    If Not (ptr1 Or ptr2) Then
+                        newbytes(1) = newbytes(1) Or (reg32(reg2) * 8)
+                        newbytes(1) = newbytes(1) Or reg32(reg1)
+                        newbytes(1) = newbytes(1) Or &HC0
+                    End If
+
+                    Dim offset
+                    offset = plus1 + plus2
+
+                    If Math.Abs(offset) < &H80 Then
+                        If offset > 0 Then
+                            newbytes(1) = newbytes(1) Or &H40
+                            newbytes = newbytes.Concat({offset And &HFF}).ToArray
+                        End If
+                    End If
+                    If Math.Abs(offset) > &H7F Then
+                        newbytes(1) = newbytes(1) Or &H80
+                        newbytes = newbytes.Concat(BitConverter.GetBytes(offset)).ToArray
+                    End If
+
+
+
+                    If Not ptr1 And Not ptr2 Then
+                        newbytes = {&H21, &HC0}
+                        newbytes(1) = newbytes(1) Or reg32(reg2) * 8
+                        newbytes(1) = newbytes(1) Or reg32(reg1)
+                    End If
+                End If
+                Add(newbytes)
+                pos += newbytes.Count
+                Return
+
             Case "call"
                 If Not ptr1 Then
                     If reg32.Contains(reg1) Then
@@ -226,7 +384,7 @@
                     End If
                 Else
                     'Is an offset from a register
-                    If Math.Abs(plus1) < &H100 Then
+                    If Math.Abs(plus1) < &H80 Then
                         If plus1 = 0 Then
                             newbytes = {&HFF, &H10}
                             newbytes(1) = newbytes(1) Or reg32(reg1)
@@ -249,7 +407,7 @@
             Case "cmp"
                 If reg32.Contains(reg1) And reg2 = "" Then
                     newbytes = {&H81, &HF8}
-                    If Math.Abs(val2) < &HFF Then
+                    If Math.Abs(val2) < &H80 Then
                         newbytes(0) = newbytes(0) Or 2
                         newbytes = newbytes.Concat({val2 And &HFF}).ToArray
                     Else
@@ -284,13 +442,13 @@
                     Dim offset
                     offset = plus1 + plus2
 
-                    If Math.Abs(offset) < &H100 Then
+                    If Math.Abs(offset) < &H80 Then
                         If offset > 0 Then
                             newbytes(1) = newbytes(1) Or &H40
                             newbytes = newbytes.Concat({offset And &HFF}).ToArray
                         End If
                     End If
-                    If Math.Abs(offset) > &HFF Then
+                    If Math.Abs(offset) > &H7F Then
                         newbytes(1) = newbytes(1) Or &H80
                         newbytes = newbytes.Concat(BitConverter.GetBytes(offset)).ToArray
                     End If
@@ -309,8 +467,11 @@
 
             Case "je"
                 newbytes = {&HF, &H84}
-                Dim addr = Convert.ToInt32(val1) - pos - 5
+                Dim addr = Convert.ToInt32(val1) - pos - 6
                 newbytes = newbytes.Concat(BitConverter.GetBytes(addr)).ToArray
+                Add(newbytes)
+                pos += newbytes.Count
+                Return
 
             Case "jmp"
                 If Not ptr1 Then
@@ -326,7 +487,7 @@
                     End If
                 Else
                     'Is an offset from a register
-                    If Math.Abs(plus1) < &H100 Then
+                    If Math.Abs(plus1) < &H80 Then
                         If plus1 = 0 Then
                             newbytes = {&HFF, &H20}
                             newbytes(1) = newbytes(1) Or reg32(reg1)
@@ -348,9 +509,11 @@
 
             Case "jne"
                 newbytes = {&HF, &H85}
-                Dim addr = Convert.ToInt32(val1) - pos - 5
+                Dim addr = Convert.ToInt32(val1) - pos - 6
                 newbytes = newbytes.Concat(BitConverter.GetBytes(addr)).ToArray
-
+                Add(newbytes)
+                pos += newbytes.Count
+                Return
 
             Case "mov"
                 'TODO:  Complete
@@ -393,14 +556,14 @@
                     If (ptr1 And reg1 = "esp") Or (ptr2 And reg2 = "esp") Then
                         newbytes = newbytes.Concat({&H24}).ToArray
                     End If
-
-                    If Math.Abs(offset) < &H100 Then
-                        If offset > 0 Or (ptr2 And reg2 = "ebp") Or (ptr1 And reg1 = "ebp") Then
+                    
+                    If Math.Abs(offset) < &H80 Then
+                        If math.Abs(offset) > 0 Or (ptr2 And reg2 = "ebp") Or (ptr1 And reg1 = "ebp") Then
                             newbytes(1) = newbytes(1) Or &H40
                             newbytes = newbytes.Concat({offset And &HFF}).ToArray
                         End If
                     End If
-                    If Math.Abs(offset) > &HFF Then
+                    If Math.Abs(offset) > &H7F Then
                         newbytes(1) = newbytes(1) Or &H80
                         newbytes = newbytes.Concat(BitConverter.GetBytes(offset)).ToArray
                     End If
@@ -428,7 +591,7 @@
                     End If
                 Else
                     'Is an offset from a register
-                    If Math.Abs(plus1) < &H100 Then
+                    If Math.Abs(plus1) < &H80 Then
                         If plus1 = 0 Then
                             'No Offset
                             newbytes = {&HFF, &H30}
