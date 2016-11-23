@@ -623,6 +623,25 @@
                 pos += newbytes.Count
                 Return
 
+
+            Case "shl", "shr"
+                'TODO:  Handle reg1 = ax, al
+                If reg32.Contains(reg1) Then
+                    If reg2 = "cl" Then
+                        newbytes = {&HD3, &HE0}
+                    End If
+                    If reg2 = "" Then
+                        newbytes = {&HC1, &HE0}
+                        newbytes = newbytes.Concat({val2 And &HFF}).ToArray
+                    End If
+                    newbytes(1) = newbytes(1) Or reg32(reg1)
+                    If cmd = "shr" Then newbytes(1) = newbytes(1) Or &H8
+                End If
+                Add(newbytes)
+                pos += newbytes.Count
+                Return
+
+
         End Select
     End Sub
     Public Overrides Function ToString() As String
